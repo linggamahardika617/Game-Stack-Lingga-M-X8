@@ -1,0 +1,557 @@
+<!DOCTYPE html><html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>STACK Vertical — Kota & Langit Realistis</title>
+  <style>
+    /* =======================
+       RESET & GLOBAL STYLES
+       ======================= */
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;color:#fff;overflow:hidden;background:#0a1020}canvas{position:fixed;inset:0;display:block;width:100vw;height:100vh}
+
+/* HUD */
+.hud{position:fixed;top:10px;left:0;right:0;display:flex;justify-content:center;z-index:6}
+.pill{background:rgba(0,0,0,.35);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.18);padding:6px 14px;border-radius:999px;font-weight:800;letter-spacing:.35px}
+.brand{position:fixed;right:10px;bottom:8px;font-size:12px;color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(0,0,0,.6);z-index:6}
+
+/* Menus */
+.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;z-index:7}
+.panel{width:min(560px,92vw);background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.18);border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.35);backdrop-filter:blur(8px);padding:22px;text-align:center}
+.title{font-weight:900;font-size:clamp(28px,6vw,44px);margin:6px 0 4px}
+.subtitle{opacity:.9;margin-bottom:12px}
+.btns{display:grid;gap:12px;margin-top:14px}
+.btn{appearance:none;cursor:pointer;border:none;border-radius:14px;padding:14px 16px;font-weight:900;letter-spacing:.4px;color:#0b0b0b;transition:transform .06s ease,filter .2s ease}
+.btn:hover{transform:translateY(-1px);filter:brightness(1.05)}
+.btn:active{transform:translateY(1px) scale(.99)}
+.btn-primary{background:linear-gradient(135deg,#a8ff78,#78ffd6)}
+.btn-secondary{background:linear-gradient(135deg,#f6d365,#fda085)}
+.btn-tertiary{background:linear-gradient(135deg,#84fab0,#8fd3f4)}
+
+.selection{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:8px}
+.card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:14px;cursor:pointer;transition:transform .08s ease,background .2s ease}
+.card:hover{transform:translateY(-2px);background:rgba(255,255,255,.14)}
+.card .icon{font-size:28px}
+.card .label{margin-top:8px;font-weight:800}
+
+/* Game Over Overlay */
+.overlay{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;z-index:8}
+.overlay .box{opacity:0;transform:translateY(12px) scale(.98);transition:opacity .35s ease,transform .35s ease;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(8px);padding:18px;border-radius:16px;text-align:center;width:min(420px,88vw)}
+.overlay.show{pointer-events:auto}
+.overlay.show .box{opacity:1;transform:translateY(0) scale(1)}
+.overlay h2{margin:6px 0 8px;font-size:clamp(24px,5vw,36px)}
+
+.hidden{display:none!important}
+
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>  <!-- HUD -->  <div class="hud">
+    <div class="pill" id="score">Skor: 0 · Rekor: 0</div>
+  </div>
+  <div class="brand">Game By. Lingga M. X8 SMAN 2 Mejayan</div>  <!-- MENU UTAMA -->  <section class="screen" id="menuScreen">
+    <div class="panel">
+      <div class="title">STACK — Vertical City</div>
+      <div class="subtitle">Jatuhkan blok dari atas, tumpuk setinggi langit! Potong bagian yang meleset.</div>
+      <div class="btns">
+        <button class="btn btn-primary" id="btnStart">Mulai Game</button>
+        <button class="btn btn-secondary" id="btnSelect">Pilih Objek</button>
+        <button class="btn btn-tertiary" id="btnQuit">Keluar</button>
+      </div>
+      <div id="quitMsg" style="margin-top:10px;opacity:.9;display:none;">Kamu bisa kembali kapan saja untuk bermain lagi. 😉</div>
+    </div>
+  </section>  <!-- SELEKSI OBJEK -->  <section class="screen hidden" id="selectScreen">
+    <div class="panel">
+      <div class="title" style="margin:0;">Pilih Objek Tumpukan</div>
+      <div class="subtitle" style="margin-top:4px">Gaya objek memengaruhi tampilan blok.</div>
+      <div class="selection" id="objectGrid"></div>
+      <div style="margin-top:12px;font-size:13px;opacity:.85;">Objek terpilih: <b id="chosenLabel">Balok</b></div>
+      <div class="btns" style="margin-top:12px;">
+        <button class="btn btn-primary" id="btnPlayFromSelect">Mainkan</button>
+        <button class="btn btn-tertiary" id="btnBack">Kembali</button>
+      </div>
+    </div>
+  </section>  <!-- GAME OVER -->  <div class="overlay" id="gameOver">
+    <div class="box">
+      <h2>Game Over</h2>
+      <p id="finalScore">Skor: 0</p>
+      <div id="topList" style="font-size:13px;opacity:.9;margin-bottom:12px"></div>
+      <div class="btns">
+        <button class="btn btn-primary" id="btnRestart">Restart</button>
+        <button class="btn btn-tertiary" id="btnMenu">Menu</button>
+      </div>
+    </div>
+  </div>  <script>
+  // =======================
+  //  GAME: STACK VERTICAL
+  //  HTML5 Canvas — No library
+  // =======================
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  // UI refs
+  const scoreEl = document.getElementById('score');
+  const over = document.getElementById('gameOver');
+  const finalScoreEl = document.getElementById('finalScore');
+  const topListEl = document.getElementById('topList');
+  const menuScreen = document.getElementById('menuScreen');
+  const selectScreen = document.getElementById('selectScreen');
+  const btnStart = document.getElementById('btnStart');
+  const btnSelect = document.getElementById('btnSelect');
+  const btnQuit = document.getElementById('btnQuit');
+  const quitMsg = document.getElementById('quitMsg');
+  const btnBack = document.getElementById('btnBack');
+  const btnPlayFromSelect = document.getElementById('btnPlayFromSelect');
+  const btnRestart = document.getElementById('btnRestart');
+  const btnMenu = document.getElementById('btnMenu');
+  const objectGrid = document.getElementById('objectGrid');
+  const chosenLabel = document.getElementById('chosenLabel');
+
+  // Responsive canvas with DPR scaling
+  function resize(){
+    const dpr = Math.max(1, Math.min(2, devicePixelRatio||1));
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  // ---------- Persistent scores (localStorage) ----------
+  const LS_KEY_BEST = 'stackBest';
+  const LS_KEY_LIST = 'stackTop5';
+  function getBest(){ return Number(localStorage.getItem(LS_KEY_BEST)||0); }
+  function setBest(v){ localStorage.setItem(LS_KEY_BEST, String(v)); }
+  function getTop(){ try{ return JSON.parse(localStorage.getItem(LS_KEY_LIST)||'[]'); }catch{ return []; } }
+  function setTop(arr){ localStorage.setItem(LS_KEY_LIST, JSON.stringify(arr.slice(0,5))); }
+
+  // ---------- Object styles ----------
+  const OBJECT_TYPES = [
+    { id:'balok', name:'Balok', icon:'🧱' },
+    { id:'es', name:'Kotak Es', icon:'🧊' },
+    { id:'batu', name:'Batu', icon:'🪨' },
+    { id:'kardus', name:'Kardus', icon:'📦' },
+    { id:'ikon', name:'Ikon Lucu', icon:'😀' }
+  ];
+  let chosenType = OBJECT_TYPES[0];
+  function buildCards(){
+    objectGrid.innerHTML='';
+    OBJECT_TYPES.forEach(t=>{
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `<div class="icon">${t.icon}</div><div class="label">${t.name}</div>`;
+      card.onclick = ()=>{ chosenType = t; chosenLabel.textContent = t.name; };
+      objectGrid.appendChild(card);
+    });
+  }
+  buildCards();
+
+  // ---------- Game constants ----------
+  const BLOCK_H = 26;            // tinggi blok
+  const START_W = 220;           // lebar awal blok
+  const AIM_Y_OFFSET = 240;      // jarak "lintasan bidik" dari top tumpukan
+  const GRAVITY = 0.9;           // gravitasi jatuh
+  const H_SPEED_BASE = 2.4;      // kecepatan gerak horizontal di lintasan
+  const H_SPEED_INC = 0.06;      // tambahan kecepatan per level
+  const FALL_BOUNCE = 0.0;       // tanpa pantul untuk presisi
+
+  // ---------- State ----------
+  const State = { MENU:'menu', SELECT:'select', PLAY:'play', OVER:'over' };
+  let state = State.MENU;
+
+  let blocks = [];               // blok yang sudah ditempatkan
+  let moving = null;             // blok yang sedang dibidik atau jatuh
+  let isFalling = false;         // status jatuh
+  let dir = 1;                   // arah gerak horizontal saat aiming
+  let hs = H_SPEED_BASE;         // kecepatan horizontal saat aiming
+  let level = 0;                 // skor
+  let cameraY = 0;               // offset kamera
+  let cutPieces = [];            // potongan yang jatuh
+
+  // ---------- Background: Realistic-ish City & Sky ----------
+  // Sky changes from day to dusk to night as level increases
+  function skyColor(level){
+    // map level 0..30 to t 0..1
+    const t = Math.max(0, Math.min(1, level/30));
+    // interpolate three colors: day -> dusk -> night
+    // day top/bot
+    const c1 = [80,180,255];   // top day
+    const c2 = [160,210,255];  // bottom day
+    // dusk
+    const d1 = [255,120,80];
+    const d2 = [255,180,120];
+    // night
+    const n1 = [10,16,32];
+    const n2 = [28,36,60];
+    function mix(a,b,t){ return a + (b-a)*t; }
+    // two-stage blend: 0..0.5 day->dusk, 0.5..1 dusk->night
+    let top,bot;
+    if (t < .5){
+      const k = t/.5;
+      top = [mix(c1[0],d1[0],k), mix(c1[1],d1[1],k), mix(c1[2],d1[2],k)];
+      bot = [mix(c2[0],d2[0],k), mix(c2[1],d2[1],k), mix(c2[2],d2[2],k)];
+    } else {
+      const k = (t-.5)/.5;
+      top = [mix(d1[0],n1[0],k), mix(d1[1],n1[1],k), mix(d1[2],n1[2],k)];
+      bot = [mix(d2[0],n2[0],k), mix(d2[1],n2[1],k), mix(d2[2],n2[2],k)];
+    }
+    return {top:`rgb(${top.map(x=>x|0).join(',')})`, bot:`rgb(${bot.map(x=>x|0).join(',')})`};
+  }
+
+  // City layers (parallax skylines)
+  const cityLayers = [];
+  function buildCity(){
+    cityLayers.length = 0;
+    const layers = 3; // back, mid, front
+    for(let L=0; L<layers; L++){
+      const buildings = [];
+      const n = Math.ceil(innerWidth/40) + 4;
+      const baseH = (L===0? 80: L===1? 120: 160);
+      for(let i=0;i<n;i++){
+        const w = 30 + Math.random()*30;
+        const x = i* (innerWidth/(n-2)) + (Math.random()*20-10);
+        const h = baseH + Math.random()* (L===0? 40 : L===1? 80 : 120);
+        buildings.push({x, w, h});
+      }
+      cityLayers.push(buildings);
+    }
+  }
+  buildCity();
+
+  // Clouds
+  const clouds = [];
+  function buildClouds(){
+    clouds.length=0;
+    for(let i=0;i<8;i++){
+      clouds.push({x:Math.random()*innerWidth, y:40+Math.random()*180, s:0.3+Math.random()*0.6, w:80+Math.random()*140});
+    }
+  }
+  buildClouds();
+
+  // ---------- Helpers ----------
+  function updateScore(){
+    scoreEl.textContent = `Skor: ${level} · Rekor: ${getBest()}`;
+  }
+
+  function spawnMoving(){
+    const prev = blocks[blocks.length-1];
+    const aimY = prev.y - AIM_Y_OFFSET; // lintasan bidik di atas tumpukan
+    const w = prev.w;                   // lebar mengikuti blok sebelumnya
+    const startX = Math.random()<.5 ? (innerWidth*0.2) : (innerWidth*0.8 - w);
+    dir = startX < innerWidth/2 ? 1 : -1;
+    isFalling = false;
+    moving = { x:startX, y:aimY, w, vy:0, h:BLOCK_H, colorSeed: blocks.length };
+  }
+
+  function resetGame(){
+    blocks = [];
+    cutPieces = [];
+    cameraY = 0;
+    level = 0;
+    hs = H_SPEED_BASE;
+
+    // base block on the ground line
+    const baseW = START_W;
+    const baseX = innerWidth/2 - baseW/2;
+    const baseY = innerHeight - 100;  // ground height
+    blocks.push({x:baseX, y:baseY, w:baseW, h:BLOCK_H, colorSeed: 0});
+
+    spawnMoving();
+    updateScore();
+  }
+
+  // Color palette per object
+  function colorFor(i){
+    if (chosenType.id==='batu') return 'hsl(0 0% 55%)';
+    if (chosenType.id==='kardus') return 'hsl(30 60% 55%)';
+    if (chosenType.id==='es') return 'hsl(210 80% 85%)';
+    // vivid cycles
+    const hue = (i*43) % 360; return `hsl(${hue} 80% 60%)`;
+  }
+
+  // Input: drop the block
+  function drop(){
+    if(state!==State.PLAY || !moving || isFalling) return;
+    isFalling = true;
+    moving.vy = 0; // start falling
+  }
+  addEventListener('keydown', e=>{ if(e.code==='Space'){ e.preventDefault(); drop(); } });
+  addEventListener('mousedown', drop);
+  addEventListener('touchstart', drop, {passive:true});
+
+  // Collision & trimming
+  function settleOrFail(){
+    const prev = blocks[blocks.length-1];
+    const curr = moving;
+
+    // align Y on top of previous
+    curr.y = prev.y - BLOCK_H;
+
+    // compute horizontal overlap
+    const prevL = prev.x, prevR = prev.x + prev.w;
+    const currL = curr.x, currR = curr.x + curr.w;
+    const overlapL = Math.max(prevL, currL);
+    const overlapR = Math.min(prevR, currR);
+    const overlap = overlapR - overlapL;
+
+    if (overlap <= 0){
+      // miss — game over
+      gameOver();
+      return;
+    }
+
+    // spawn falling piece (side that sticks out)
+    if (currL < prevL){
+      const cutW = prevL - currL;
+      cutPieces.push({x: currL, y: curr.y, w: cutW, h: BLOCK_H, vy: 0, rot:(Math.random()-.5)*0.2, colorSeed: curr.colorSeed});
+    }
+    if (currR > prevR){
+      const cutW = currR - prevR;
+      cutPieces.push({x: prevR, y: curr.y, w: cutW, h: BLOCK_H, vy: 0, rot:(Math.random()-.5)*0.2, colorSeed: curr.colorSeed});
+    }
+
+    // snap to overlap
+    curr.x = overlapL;
+    curr.w = overlap;
+
+    // finish placement
+    blocks.push(curr);
+    moving = null;
+    isFalling = false;
+
+    level++;
+    hs += H_SPEED_INC; // harder horizontally for aiming
+    updateScore();
+
+    // camera follows upward smoothly
+    const topY = blocks[blocks.length-1].y;
+    cameraTarget = Math.max(0, innerHeight*0.5 - topY);
+
+    spawnMoving();
+  }
+
+  // Camera smoothing
+  let cameraTarget = 0;
+
+  // ---------- Drawing ----------
+  function drawSky(){
+    const col = skyColor(level);
+    const g = ctx.createLinearGradient(0,0,0,innerHeight);
+    g.addColorStop(0, col.top);
+    g.addColorStop(1, col.bot);
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,innerWidth,innerHeight);
+  }
+
+  function drawCloud(c){
+    ctx.save();
+    ctx.globalAlpha = 0.65;
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    // soft multi-lobe cloud
+    const y = c.y + cameraY*0.1; // slight parallax
+    ctx.beginPath();
+    const x = c.x; const w=c.w; const h=w*0.45;
+    ctx.arc(x, y, h*0.42, 0, Math.PI*2);
+    ctx.arc(x+w*0.25, y-8, h*0.5, 0, Math.PI*2);
+    ctx.arc(x+w*0.5, y, h*0.42, 0, Math.PI*2);
+    ctx.arc(x+w*0.75, y-6, h*0.36, 0, Math.PI*2);
+    ctx.arc(x+w, y, h*0.4, 0, Math.PI*2);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCity(){
+    // ground line
+    ctx.save();
+    ctx.translate(0, cameraY*0.2); // parallax for city
+    for(let L=0; L<cityLayers.length; L++){
+      const buildings = cityLayers[L];
+      const shade = L===0? 'rgba(0,0,0,.15)' : L===1? 'rgba(0,0,0,.25)' : 'rgba(0,0,0,.35)';
+      ctx.fillStyle = shade;
+      const baseY = innerHeight - 40 + L*12; // stacked layers
+      for(const b of buildings){
+        const x=b.x, w=b.w, h=b.h;
+        ctx.fillRect(x, baseY - h, w, h);
+        // windows (turn on more at night)
+        const night = Math.min(1, level/25);
+        if (Math.random() < 0.7*night){
+          ctx.fillStyle = 'rgba(255,230,160,.8)';
+          for(let yy=baseY-h+8; yy<baseY-8; yy+=10){
+            for(let xx=x+4; xx<x+w-4; xx+=8){
+              if (Math.random()<0.14) ctx.fillRect(xx, yy, 3, 4);
+            }
+          }
+          ctx.fillStyle = shade;
+        }
+      }
+    }
+    ctx.restore();
+
+    // ground strip
+    ctx.save();
+    ctx.translate(0, cameraY);
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.fillRect(0, innerHeight-40, innerWidth, 40);
+    ctx.restore();
+  }
+
+  function drawBlock(b){
+    ctx.save();
+    ctx.translate(0, cameraY);
+    const r = 8; // corner radius
+    function rr(x,y,w,h,rad){
+      const cr = Math.min(rad, h/2, Math.abs(w)/2);
+      ctx.beginPath();
+      ctx.moveTo(x+cr,y);
+      ctx.lineTo(x+w-cr,y);
+      ctx.quadraticCurveTo(x+w,y,x+w,y+cr);
+      ctx.lineTo(x+w,y+h-cr);
+      ctx.quadraticCurveTo(x+w,y+h,x+w-cr,y+h);
+      ctx.lineTo(x+cr,y+h);
+      ctx.quadraticCurveTo(x,y+h,x,y+h-cr);
+      ctx.lineTo(x,y+cr);
+      ctx.quadraticCurveTo(x,y,x+cr,y);
+      ctx.closePath();
+    }
+
+    // fill per object style
+    if (chosenType.id==='es'){
+      rr(b.x,b.y,b.w,b.h,r); ctx.fillStyle='rgba(180,220,255,.9)'; ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.35)'; rr(b.x+4,b.y+3,b.w-8,b.h*0.38,r); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=1; rr(b.x,b.y,b.w,b.h,r); ctx.stroke();
+    } else if (chosenType.id==='batu'){
+      rr(b.x,b.y,b.w,b.h,r); ctx.fillStyle='hsl(0 0% 55%)'; ctx.fill();
+      for(let i=0;i<10;i++){ ctx.fillStyle='rgba(0,0,0,.12)'; ctx.beginPath(); ctx.arc(b.x+Math.random()*b.w, b.y+Math.random()*b.h, 1+Math.random()*1.4, 0, Math.PI*2); ctx.fill(); }
+      ctx.strokeStyle='rgba(255,255,255,.15)'; rr(b.x,b.y,b.w,b.h,r); ctx.stroke();
+    } else if (chosenType.id==='kardus'){
+      rr(b.x,b.y,b.w,b.h,r); ctx.fillStyle='hsl(30 60% 55%)'; ctx.fill();
+      ctx.strokeStyle='rgba(0,0,0,.15)'; ctx.lineWidth=1; for(let y=b.y+6; y<b.y+b.h-4; y+=6){ ctx.beginPath(); ctx.moveTo(b.x+6,y); ctx.lineTo(b.x+b.w-6,y); ctx.stroke(); }
+      ctx.fillStyle='rgba(255,255,255,.16)'; ctx.fillRect(b.x+b.w*0.45,b.y+2,b.w*0.1,b.h-4);
+    } else if (chosenType.id==='ikon'){
+      rr(b.x,b.y,b.w,b.h,r); ctx.fillStyle=colorFor(b.colorSeed); ctx.fill();
+      ctx.font = `${Math.max(12, Math.min(24, b.w*0.25))}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('😺', b.x + b.w/2, b.y + b.h/2 + 1);
+    } else {
+      rr(b.x,b.y,b.w,b.h,r); // balok vivid
+      const grd = ctx.createLinearGradient(b.x,b.y,b.x,b.y+b.h);
+      grd.addColorStop(0,colorFor(b.colorSeed)); grd.addColorStop(1,'rgba(255,255,255,.12)');
+      ctx.fillStyle = grd; ctx.fill();
+    }
+
+    // tiny shadow
+    ctx.globalAlpha = .25; ctx.fillStyle = '#000'; ctx.fillRect(b.x, b.y+b.h-1, b.w, 2); ctx.globalAlpha=1;
+
+    ctx.restore();
+  }
+
+  function drawCut(p){
+    ctx.save();
+    ctx.translate(0, cameraY);
+    ctx.rotate(p.rot);
+    ctx.fillStyle = colorFor(p.colorSeed);
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.restore();
+  }
+
+  // ---------- Loop ----------
+  let raf=null;
+  function loop(){
+    raf = requestAnimationFrame(loop);
+
+    // background
+    drawSky();
+
+    // clouds
+    for(const c of clouds){ c.x += c.s; if(c.x - c.w > innerWidth) c.x = -c.w; drawCloud(c); }
+
+    // city
+    drawCity();
+
+    // physics update
+    if (state===State.PLAY && moving){
+      // aiming (horizontal drift) on the aim line
+      if (!isFalling){
+        moving.x += dir * hs;
+        const minX = 20; const maxX = innerWidth - moving.w - 20;
+        if (moving.x <= minX){ moving.x=minX; dir=1; }
+        if (moving.x >= maxX){ moving.x=maxX; dir=-1; }
+      } else {
+        // falling: accelerate with gravity until touching stack
+        moving.vy += GRAVITY;
+        moving.y += moving.vy;
+        const prev = blocks[blocks.length-1];
+        if (moving.y + moving.h >= prev.y){
+          // contact
+          settleOrFail();
+        }
+      }
+    }
+
+    // update cut pieces
+    for(let i=cutPieces.length-1;i>=0;i--){
+      const p = cutPieces[i];
+      p.vy += 0.7;
+      p.y += p.vy;
+      p.rot += 0.002 * p.vy;
+      if (p.y - cameraY > innerHeight + 200) cutPieces.splice(i,1);
+    }
+
+    // camera smooth to target
+    cameraY += (cameraTarget - cameraY) * 0.08;
+
+    // draw placed blocks
+    for(const b of blocks) drawBlock(b);
+    // draw moving
+    if (moving) drawBlock(moving);
+    // draw cuts
+    for(const p of cutPieces) drawCut(p);
+  }
+  loop();
+
+  function gameOver(){
+    state = State.OVER;
+    const score = level;
+    // update best & top list
+    const best = Math.max(getBest(), score); setBest(best);
+    const top = getTop(); top.push(score); top.sort((a,b)=>b-a); setTop(top);
+
+    finalScoreEl.textContent = `Skor: ${score} · Rekor: ${getBest()}`;
+    const top5 = getTop();
+    topListEl.innerHTML = '<b>Top 5 Lokal</b><br>' + top5.map((v,i)=>`#${i+1} — ${v}`).join('<br>');
+
+    over.classList.add('show');
+  }
+
+  // ---------- Menu & Flow ----------
+  function gotoMenu(){ state=State.MENU; menuScreen.classList.remove('hidden'); selectScreen.classList.add('hidden'); over.classList.remove('show'); updateScore(); }
+  function gotoSelect(){ state=State.SELECT; menuScreen.classList.add('hidden'); selectScreen.classList.remove('hidden'); }
+  function startPlay(){ state=State.PLAY; menuScreen.classList.add('hidden'); selectScreen.classList.add('hidden'); over.classList.remove('show'); resetGame(); }
+
+  btnStart.onclick = startPlay;
+  btnSelect.onclick = gotoSelect;
+  btnQuit.onclick = () => { quitMsg.style.display='block'; };
+  btnBack.onclick = gotoMenu;
+  btnPlayFromSelect.onclick = startPlay;
+  btnRestart.onclick = startPlay;
+  btnMenu.onclick = gotoMenu;
+
+  // start at menu
+  gotoMenu();
+
+  // Rebuild background on resize (keeps proportions nice)
+  addEventListener('resize', ()=>{ buildCity(); buildClouds(); });
+
+  // ======== RINGKASAN MEKANIK ========
+  // - Blok baru bergerak horizontal di lintasan atas (aim line)
+  // - Pemain klik/space/tap untuk MENJATUHKAN (vertical drop)
+  // - Saat menyentuh blok sebelumnya: hitung overlap horizontal
+  //   * Tidak overlap -> Game Over
+  //   * Overlap parsial -> bagian menonjol dipotong & dijatuhkan sebagai potongan
+  //   * Lebar blok berikutnya = lebar overlap
+  // - Kesulitan bertambah: kecepatan drift horizontal (aiming) meningkat tiap level
+  // - Kamera mengikuti tumpukan naik, langit berubah siang->senja->malam, lampu gedung menyala
+  // - Rekor terbaik & Top 5 skor tersimpan di localStorage
+  </script></body>
+</html>
